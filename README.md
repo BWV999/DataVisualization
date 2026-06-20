@@ -108,12 +108,23 @@ with `reduce="mean"`.
 
 Dependencies are managed with [**uv**](https://docs.astral.sh/uv/). The tracer and
 the GUI install separately, so instrumenting your program never drags in the Qt
-viewer stack — only `pyzmq` / `msgpack` / `numpy`:
+viewer stack — only `pyzmq` / `msgpack` / `numpy`.
+
+To add just the tracer to an existing project (e.g. on a headless remote GPU box),
+install it straight from GitHub — no clone needed:
 
 ```bash
+uv pip install "git+https://github.com/BWV999/DataVisualization"               # tracer only
+uv pip install "datavis[gui] @ git+https://github.com/BWV999/DataVisualization"  # + viewer
+```
+
+To work on the repo (run the demos / GUI / tests), clone it and install editable:
+
+```bash
+git clone https://github.com/BWV999/DataVisualization
+cd DataVisualization
 uv venv
 uv pip install -e .              # tracer only — for the process being visualized
-                                 #   (e.g. a headless remote GPU box)
 uv pip install -e ".[gui]"       # + the PyQtGraph viewer (the machine you watch on)
 uv pip install -e ".[dev]"       # + the test suite (includes the gui stack)
 ```
