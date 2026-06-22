@@ -153,6 +153,7 @@ uv run python examples/demo_mamba.py       # Bi-Mamba+ SSM (rolled recurrence + 
 uv run python examples/demo_preprocess.py  # numpy preprocessing -> torch, one DAG
 uv run python examples/demo_sklearn.py     # sklearn Pipeline (scale -> PCA) -> torch
 uv run python examples/demo_unified.py     # numpy -> sklearn -> torch, all stitched
+uv run python examples/demo_remote.py      # k-fold + bind="0.0.0.0" + serve (remote recipe)
 ```
 
 `demo_signal` runs a finite sequence then holds the final state, so a panel opened
@@ -168,6 +169,56 @@ as icon nodes; drag the **LOD** slider to collapse/expand depth; pick a node in
 (in the graph or the tree) to open a live panel (1D/small → curves, 2D/ND →
 heatmap). Hidden nodes are *contracted* — bypassed by reachability — so the DAG
 stays connected at any level of detail.
+
+## Remote training (GUI over an SSH tunnel)
+
+Train on a remote GPU box, watch from your laptop. The tracer binds inside the
+training process; the GUI connects to it over an SSH `-L` tunnel.
+
+**1. Trainer side — bind on a reachable interface.** The default bind is
+`127.0.0.1`, which a remote GUI can't reach; pass `bind="0.0.0.0"` (or export
+`DATAVIS_BIND=0.0.0.0`). `attach` prints where it's listening so you know what to
+forward:
+
+```python
+import datavis.tracer as viz
+viz.attach(model, bind="0.0.0.0")
+# [datavis] tracer listening on gpu-node-7 tcp://0.0.0.0:5750 (ctrl) / :5751 (data)
+```
+
+**k-fold / multi-model loops** build a fresh model per fold. Use `reattach` to
+swap the hooked model while keeping the same ports bound (a second `attach` on
+the same ports does this too — it no longer raises "Address already in use"):
+
+```python
+viz.attach(models[0], bind="0.0.0.0")
+for m in models[1:]:
+    viz.reattach(m)          # rebinds hooks to the new fold's model
+```
+
+**2. Keep the run inspectable after training ends.** The tracer dies with the
+process, so a GUI that connects late gets "connection refused". `viz.serve` keeps
+it alive and re-forwards batches so subscribed nodes keep streaming — connect and
+inspect whenever:
+
+```python
+train(...)                                  # your normal loop
+viz.serve(model, val_batches, bind="0.0.0.0")   # blocks, re-forwards, Ctrl-C to stop
+```
+
+(`viz.serve()` with no batches just lingers, holding the last structure.)
+
+**3. Laptop — tunnel both ports and check reachability before opening the GUI:**
+
+```bash
+ssh -N -L 5750:<compute-node>:5750 -L 5751:<compute-node>:5751 user@login-node
+python -m datavis.probe tcp://127.0.0.1:5750   # handshake + node list (no Qt needed)
+python -m datavis.gui.app                       # defaults to 127.0.0.1:5750/5751
+```
+
+`python -m datavis.probe` does the control handshake and prints the available
+nodes — a quick way to confirm the tunnel reaches the tracer before launching the
+full viewer.
 
 ## Test
 

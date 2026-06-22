@@ -133,12 +133,23 @@ processes share.
   the *tree* to see the output. (Leaf-root models, e.g. a bare `nn.Linear`, link
   `model.input → model`, so both input and output show in the DAG.)
 
-- **One process-shared server on the default ports.** `viz.attach` (default-port
-  path), `viz.track`, and `viz.attach_pipeline` all adopt `_get_default_server()`
-  in `tracer/__init__.py`, so calling `track`/`attach_pipeline` before `attach`
-  does not bind 5750 out from under `attach` (an intra-process self-conflict that
-  *looks* like a stale process but is not — check `/proc/net/tcp` before blaming a
-  ghost). Custom ports still get a dedicated, owned server.
+- **Servers are cached by `(ctrl_addr, data_addr)` in a process registry**
+  (`_servers` in `tracer/__init__.py`, via `_get_server`). `viz.attach`,
+  `viz.track`, and `viz.attach_pipeline` all adopt the cached server for their
+  address, so (a) `track`/`attach_pipeline` before `attach` don't bind the ports
+  out from under `attach` (an intra-process self-conflict that *looks* like a
+  stale process but is not — check `/proc/net/tcp` before blaming a ghost), and
+  (b) a **second `attach`/`reattach` on the same custom ports rebinds the hooks
+  to the new model** instead of raising "Address already in use" — the k-fold /
+  multi-model loop case. `_get_server` returns `(server, created)` and recreates
+  a cached server that was closed out-of-band (`tracer.server.close()`, as the
+  tests do), so the registry never hands back a dead socket. `trace()` tears down
+  only a server it *created* on a *custom* address (default-port server stays
+  shared/alive). Remote helpers live here too: `_resolve_addrs` (bind host /
+  `DATAVIS_BIND` / `DATAVIS_*_PORT` env → addresses), `attach(bind=...)`,
+  `reattach`/`detach`, `serve` (keep-alive + re-forward so a finished run stays
+  inspectable), and the attach-time `_announce` line. `python -m datavis.probe`
+  (`datavis/probe.py`) is a Qt-free control-handshake reachability check.
 
 - **`app._load_structure` must call `graph.set_structure` BEFORE
   `pipeline.set_structure`** — the tree's filter emits `filterChanged → set_visible`,

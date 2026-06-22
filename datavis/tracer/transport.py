@@ -23,6 +23,8 @@ class TracerServer:
         ctrl_addr: str = "tcp://127.0.0.1:5750",
         data_addr: str = "tcp://127.0.0.1:5751",
     ) -> None:
+        self.ctrl_addr = ctrl_addr
+        self.data_addr = data_addr
         self._ctx = zmq.Context.instance()
         self._ctrl = self._ctx.socket(zmq.REP)
         self._ctrl.bind(ctrl_addr)
@@ -34,6 +36,7 @@ class TracerServer:
         self._structure: Optional[dict] = None
         self._oplevel = protocol.OPLEVEL_OFF      # op detail tier requested by GUI
         self._lock = threading.Lock()
+        self.closed = False
 
         self._running = True
         self._thread = threading.Thread(target=self._ctrl_loop, daemon=True)
@@ -143,6 +146,7 @@ class TracerServer:
 
     # -- teardown ----------------------------------------------------------
     def close(self) -> None:
+        self.closed = True
         self._running = False
         self._thread.join(timeout=1.0)
         self._ctrl.close(0)
